@@ -75,7 +75,7 @@ functions:
   resultados_descargar:
     handler: lambdas/resultados.descargar
     events:
-      - http: { path: /deudas/resultados/{key+}/download, method: get, cors: true }
+      - http: { path: "/deudas/resultados/{key+}/download", method: get, cors: true }
 
   list_files:
     handler: lambdas/list_files.handler

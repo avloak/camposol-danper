@@ -76,7 +76,7 @@ functions:
   solicitudes_obtener:
     handler: lambdas/solicitudes.obtener
     events:
-      - http: { path: /descansos/solicitudes/{id}, method: get, cors: true }
+      - http: { path: "/descansos/solicitudes/{id}", method: get, cors: true }
 
   solicitudes_crear:
     handler: lambdas/solicitudes.crear
@@ -86,12 +86,12 @@ functions:
   solicitudes_aprobar:
     handler: lambdas/solicitudes.aprobar
     events:
-      - http: { path: /descansos/solicitudes/{id}/aprobar, method: put, cors: true }
+      - http: { path: "/descansos/solicitudes/{id}/aprobar", method: put, cors: true }
 
   solicitudes_rechazar:
     handler: lambdas/solicitudes.rechazar
     events:
-      - http: { path: /descansos/solicitudes/{id}/rechazar, method: put, cors: true }
+      - http: { path: "/descansos/solicitudes/{id}/rechazar", method: put, cors: true }
 
   solicitudes_exportar_csv:
     handler: lambdas/solicitudes.exportar_csv
@@ -107,7 +107,7 @@ functions:
   resultados_descargar:
     handler: lambdas/resultados.descargar
     events:
-      - http: { path: /descansos/resultados/{key+}/download, method: get, cors: true }
+      - http: { path: "/descansos/resultados/{key+}/download", method: get, cors: true }
 
 stepFunctions:
   stateMachines:

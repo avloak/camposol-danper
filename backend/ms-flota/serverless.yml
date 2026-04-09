@@ -35,17 +35,17 @@ functions:
   obtener:
     handler: handler.obtener
     events:
-      - http: { path: /buses/{id}, method: get, cors: true }
+      - http: { path: "/buses/{id}", method: get, cors: true }
 
   actualizar:
     handler: handler.actualizar
     events:
-      - http: { path: /buses/{id}, method: put, cors: true }
+      - http: { path: "/buses/{id}", method: put, cors: true }
 
   eliminar:
     handler: handler.eliminar
     events:
-      - http: { path: /buses/{id}, method: delete, cors: true }
+      - http: { path: "/buses/{id}", method: delete, cors: true }
 
   alertas:
     handler: handler.alertas
