@@ -1,0 +1,67 @@
+service: ms-flota
+
+frameworkVersion: "4"
+
+provider:
+  name: aws
+  runtime: python3.13
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+  memorySize: 512
+  timeout: 29
+  iam:
+    role: arn:aws:iam::${aws:accountId}:role/LabRole
+  environment:
+    TABLE_BUSES: ${self:service}-${sls:stage}-buses
+
+package:
+  individually: false
+  exclude:
+    - node_modules/**
+    - .venv/**
+    - README.md
+
+functions:
+  listar:
+    handler: handler.listar
+    events:
+      - http: { path: /buses, method: get, cors: true }
+
+  crear:
+    handler: handler.crear
+    events:
+      - http: { path: /buses, method: post, cors: true }
+
+  obtener:
+    handler: handler.obtener
+    events:
+      - http: { path: /buses/{id}, method: get, cors: true }
+
+  actualizar:
+    handler: handler.actualizar
+    events:
+      - http: { path: /buses/{id}, method: put, cors: true }
+
+  eliminar:
+    handler: handler.eliminar
+    events:
+      - http: { path: /buses/{id}, method: delete, cors: true }
+
+  alertas:
+    handler: handler.alertas
+    events:
+      - http: { path: /buses/alertas/vencimientos, method: get, cors: true }
+
+resources:
+  Resources:
+    BusesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLE_BUSES}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH

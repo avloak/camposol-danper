@@ -1,0 +1,9 @@
+{
+  "name": "ms-descansos",
+  "version": "1.0.0",
+  "description": "Microservicio descansos medicos - workflow IA",
+  "devDependencies": {
+    "serverless": "^4.0.0",
+    "serverless-step-functions": "^3.21.0"
+  }
+}

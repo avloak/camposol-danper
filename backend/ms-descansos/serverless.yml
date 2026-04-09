@@ -1,0 +1,214 @@
+service: ms-descansos
+
+frameworkVersion: "4"
+
+plugins:
+  - serverless-step-functions
+
+provider:
+  name: aws
+  runtime: python3.14
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+  memorySize: 512
+  timeout: 60
+  iam:
+    role: arn:aws:iam::${aws:accountId}:role/LabRole
+  environment:
+    TABLE_DESCANSOS: ${self:service}-${sls:stage}-descansos
+    TABLE_SOLICITUDES: ${self:service}-${sls:stage}-solicitudes
+    BUCKET_DESCANSOS: ${self:service}-${sls:stage}-bucket-${aws:accountId}
+    GROQ_API_KEY: ${env:GROQ_API_KEY}
+    GROQ_MODEL: llama-3.3-70b-versatile
+    SENDGRID_API_KEY: ${env:SENDGRID_API_KEY}
+    SENDGRID_FROM_EMAIL: ${env:SENDGRID_FROM_EMAIL}
+    AGENTE_IA_URL: ""   # se rellena tras primer deploy si se quiere usar HTTP en vez de invoke
+    STATE_MACHINE_ARN: !Ref WorkflowDescansosStepFunctionsStateMachine
+
+functions:
+  # ----- Endpoint API que arranca el workflow -----
+  start_workflow:
+    handler: lambdas/start_workflow.handler
+    environment:
+      STATE_MACHINE_ARN: !Ref WorkflowDescansosStepFunctionsStateMachine
+    events:
+      - http:
+          path: /descansos/workflow
+          method: post
+          cors: true
+
+  status_workflow:
+    handler: lambdas/start_workflow.status
+    events:
+      - http:
+          path: /descansos/workflow/{executionArn+}
+          method: get
+          cors: true
+
+  # ----- Endpoint API "Agente IA prontobus" -----
+  agente_ia:
+    handler: lambdas/agente_ia.handler
+    events:
+      - http:
+          path: /agente-ia/descansos
+          method: post
+          cors: true
+
+  # ----- Lambdas internas del workflow -----
+  list_files:
+    handler: lambdas/list_files.handler
+
+  process_file:
+    handler: lambdas/process_file.handler
+
+  generate_csv:
+    handler: lambdas/generate_csv.handler
+
+  send_email:
+    handler: lambdas/send_email.handler
+
+  # ----- Endpoints CRUD + aprobación de Solicitudes de Descanso Médico -----
+  solicitudes_listar:
+    handler: lambdas/solicitudes.listar
+    events:
+      - http: { path: /descansos/solicitudes, method: get, cors: true }
+
+  solicitudes_obtener:
+    handler: lambdas/solicitudes.obtener
+    events:
+      - http: { path: /descansos/solicitudes/{id}, method: get, cors: true }
+
+  solicitudes_crear:
+    handler: lambdas/solicitudes.crear
+    events:
+      - http: { path: /descansos/solicitudes, method: post, cors: true }
+
+  solicitudes_aprobar:
+    handler: lambdas/solicitudes.aprobar
+    events:
+      - http: { path: /descansos/solicitudes/{id}/aprobar, method: put, cors: true }
+
+  solicitudes_rechazar:
+    handler: lambdas/solicitudes.rechazar
+    events:
+      - http: { path: /descansos/solicitudes/{id}/rechazar, method: put, cors: true }
+
+  solicitudes_exportar_csv:
+    handler: lambdas/solicitudes.exportar_csv
+    events:
+      - http: { path: /descansos/solicitudes/exportar, method: get, cors: true }
+
+  # ----- Listado y descarga de CSVs de resultados del workflow IA -----
+  resultados_listar:
+    handler: lambdas/resultados.listar
+    events:
+      - http: { path: /descansos/resultados, method: get, cors: true }
+
+  resultados_descargar:
+    handler: lambdas/resultados.descargar
+    events:
+      - http: { path: /descansos/resultados/{key+}/download, method: get, cors: true }
+
+stepFunctions:
+  stateMachines:
+    workflowDescansos:
+      name: ms-descansos-${sls:stage}-workflow
+      definition:
+        Comment: Workflow procesamiento descansos médicos con IA
+        StartAt: ListFiles
+        States:
+          ListFiles:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [list_files, Arn]
+            ResultPath: $.listing
+            Next: ProcessAll
+          ProcessAll:
+            Type: Map
+            ItemsPath: $.listing.files
+            MaxConcurrency: 5
+            Parameters:
+              file.$: $$.Map.Item.Value
+              instrucciones_s3.$: $.instrucciones_s3
+              email.$: $.email
+              execution_id.$: $.execution_id
+            Iterator:
+              StartAt: ProcessFile
+              States:
+                ProcessFile:
+                  Type: Task
+                  Resource:
+                    Fn::GetAtt: [process_file, Arn]
+                  Retry:
+                    - ErrorEquals: [States.ALL]
+                      IntervalSeconds: 3
+                      MaxAttempts: 2
+                      BackoffRate: 2.0
+                  End: true
+            ResultPath: $.results
+            Next: GenerateCsv
+          GenerateCsv:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [generate_csv, Arn]
+            ResultPath: $.csv
+            Next: SendEmail
+          SendEmail:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [send_email, Arn]
+            End: true
+
+resources:
+  Resources:
+    DescansosTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLE_DESCANSOS}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: execution_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: execution_id-index
+            KeySchema:
+              - AttributeName: execution_id
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+
+    SolicitudesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLE_SOLICITUDES}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: estado
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: estado-index
+            KeySchema:
+              - AttributeName: estado
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+
+    DescansosBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:provider.environment.BUCKET_DESCANSOS}
+        CorsConfiguration:
+          CorsRules:
+            - AllowedHeaders: ["*"]
+              AllowedMethods: [GET, PUT, POST, HEAD]
+              AllowedOrigins: ["*"]

@@ -1,0 +1,158 @@
+{
+  "info": {
+    "name": "ProntoBus - ms-descansos",
+    "_postman_id": "a1f3c8e0-1234-4abc-9999-descansos00001",
+    "description": "Colección Postman para probar el API de Workflow de descansos médicos (ms-descansos). Generado con GitHub Copilot - 2026-04-08",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://CHANGEME.execute-api.us-east-1.amazonaws.com/dev",
+      "type": "string"
+    },
+    {
+      "key": "executionArn",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "bucket",
+      "value": "ms-descansos-dev-bucket-CHANGEME",
+      "type": "string"
+    },
+    {
+      "key": "solicitudId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Iniciar Workflow Descansos",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/descansos/workflow",
+          "host": ["{{baseUrl}}"],
+          "path": ["descansos", "workflow"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"instrucciones_s3\": \"s3://{{bucket}}/instrucciones/extraer.md\",\n  \"contenido_s3\":     \"s3://{{bucket}}/certificados/\",\n  \"email\":            \"supervisor@prontobus.com\"\n}"
+        }
+      }
+    },
+    {
+      "name": "2. Estado del Workflow",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/descansos/workflow/{{executionArn}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["descansos", "workflow", "{{executionArn}}"]
+        }
+      }
+    },
+    {
+      "name": "3. API Agente IA Descansos (Groq)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/agente-ia/descansos",
+          "host": ["{{baseUrl}}"],
+          "path": ["agente-ia", "descansos"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"instrucciones_s3\": \"s3://{{bucket}}/instrucciones/extraer.md\",\n  \"contenido_s3\":     \"s3://{{bucket}}/certificados/cert001.md\"\n}"
+        }
+      }
+    },
+    {
+      "name": "4. Solicitudes - Listar (filtro por estado)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/descansos/solicitudes?estado=PENDIENTE",
+          "host": ["{{baseUrl}}"],
+          "path": ["descansos", "solicitudes"],
+          "query": [
+            { "key": "estado", "value": "PENDIENTE" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "5. Solicitudes - Crear manual",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/descansos/solicitudes",
+          "host": ["{{baseUrl}}"],
+          "path": ["descansos", "solicitudes"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"paciente_nombre\": \"Juan Pérez Quispe\",\n  \"paciente_dni\": \"45678901\",\n  \"medico_nombre\": \"Dra. María Salas\",\n  \"medico_cmp\": \"56789\",\n  \"diagnostico\": \"Lumbalgia aguda - reposo absoluto\",\n  \"fecha_inicio\": \"2026-04-09\",\n  \"fecha_fin\": \"2026-04-12\",\n  \"conductor_id\": \"u-001\",\n  \"remitente_nombre\": \"RRHH Camposol\",\n  \"remitente_email\": \"rrhh@camposol.com.pe\"\n}"
+        }
+      }
+    },
+    {
+      "name": "6. Solicitudes - Obtener por id",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/descansos/solicitudes/{{solicitudId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["descansos", "solicitudes", "{{solicitudId}}"]
+        }
+      }
+    },
+    {
+      "name": "7. Solicitudes - APROBAR (envía email)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/descansos/solicitudes/{{solicitudId}}/aprobar",
+          "host": ["{{baseUrl}}"],
+          "path": ["descansos", "solicitudes", "{{solicitudId}}", "aprobar"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"observaciones\": \"Validado por médico ocupacional, procede el descanso.\",\n  \"revisado_por\": \"admin@prontobus.com\"\n}"
+        }
+      }
+    },
+    {
+      "name": "8. Solicitudes - RECHAZAR (envía email)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/descansos/solicitudes/{{solicitudId}}/rechazar",
+          "host": ["{{baseUrl}}"],
+          "path": ["descansos", "solicitudes", "{{solicitudId}}", "rechazar"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"observaciones\": \"CMP del médico no figura en el registro oficial.\",\n  \"revisado_por\": \"admin@prontobus.com\"\n}"
+        }
+      }
+    }
+  ]
+}

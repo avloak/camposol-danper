@@ -1,0 +1,83 @@
+service: ms-horarios
+
+frameworkVersion: "4"
+
+provider:
+  name: aws
+  runtime: python3.13
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+  memorySize: 512
+  timeout: 29
+  iam:
+    role: arn:aws:iam::${aws:accountId}:role/LabRole
+  environment:
+    TABLE_HORARIOS: ${self:service}-${sls:stage}-horarios
+    TABLE_RUTAS: ${self:service}-${sls:stage}-rutas
+
+functions:
+  listar:
+    handler: handler.listar
+    events:
+      - http: { path: /horarios, method: get, cors: true }
+
+  crear:
+    handler: handler.crear
+    events:
+      - http: { path: /horarios, method: post, cors: true }
+
+  obtener:
+    handler: handler.obtener
+    events:
+      - http: { path: /horarios/{id}, method: get, cors: true }
+
+  actualizar:
+    handler: handler.actualizar
+    events:
+      - http: { path: /horarios/{id}, method: put, cors: true }
+
+  eliminar:
+    handler: handler.eliminar
+    events:
+      - http: { path: /horarios/{id}, method: delete, cors: true }
+
+  asignar:
+    handler: handler.asignar_automatico
+    events:
+      - http: { path: /horarios/asignar, method: post, cors: true }
+
+  rutas_listar:
+    handler: handler.rutas_listar
+    events:
+      - http: { path: /rutas, method: get, cors: true }
+
+  rutas_crear:
+    handler: handler.rutas_crear
+    events:
+      - http: { path: /rutas, method: post, cors: true }
+
+resources:
+  Resources:
+    HorariosTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLE_HORARIOS}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+
+    RutasTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLE_RUTAS}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH

@@ -1,0 +1,173 @@
+service: ms-deudas
+
+frameworkVersion: "4"
+
+plugins:
+  - serverless-step-functions
+
+provider:
+  name: aws
+  runtime: python3.14
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+  memorySize: 512
+  timeout: 60
+  iam:
+    role: arn:aws:iam::${aws:accountId}:role/LabRole
+  environment:
+    TABLE_DEUDAS: ${self:service}-${sls:stage}-deudas
+    BUCKET_DEUDAS: ${self:service}-${sls:stage}-bucket-${aws:accountId}
+    GROQ_API_KEY: ${env:GROQ_API_KEY}
+    GROQ_MODEL: llama-3.3-70b-versatile
+    SENDGRID_API_KEY: ${env:SENDGRID_API_KEY}
+    SENDGRID_FROM_EMAIL: ${env:SENDGRID_FROM_EMAIL}
+    STATE_MACHINE_ARN: !Ref WorkflowDeudasStepFunctionsStateMachine
+
+functions:
+  start_workflow:
+    handler: lambdas/start_workflow.handler
+    environment:
+      STATE_MACHINE_ARN: !Ref WorkflowDeudasStepFunctionsStateMachine
+    events:
+      - http:
+          path: /deudas/workflow
+          method: post
+          cors: true
+
+  status_workflow:
+    handler: lambdas/start_workflow.status
+    events:
+      - http:
+          path: /deudas/workflow/{executionArn+}
+          method: get
+          cors: true
+
+  ranking:
+    handler: lambdas/ranking.handler
+    events:
+      - http:
+          path: /deudas/ranking
+          method: get
+          cors: true
+
+  por_vencer:
+    handler: lambdas/ranking.por_vencer
+    events:
+      - http:
+          path: /deudas/por-vencer
+          method: get
+          cors: true
+
+  agente_ia:
+    handler: lambdas/agente_ia.handler
+    events:
+      - http:
+          path: /agente-ia/deudas
+          method: post
+          cors: true
+
+  # ----- Listado y descarga de CSVs de resultados del workflow IA -----
+  resultados_listar:
+    handler: lambdas/resultados.listar
+    events:
+      - http: { path: /deudas/resultados, method: get, cors: true }
+
+  resultados_descargar:
+    handler: lambdas/resultados.descargar
+    events:
+      - http: { path: /deudas/resultados/{key+}/download, method: get, cors: true }
+
+  list_files:
+    handler: lambdas/list_files.handler
+
+  process_file:
+    handler: lambdas/process_file.handler
+
+  generate_csv:
+    handler: lambdas/generate_csv.handler
+
+  send_email:
+    handler: lambdas/send_email.handler
+
+stepFunctions:
+  stateMachines:
+    workflowDeudas:
+      name: ms-deudas-${sls:stage}-workflow
+      definition:
+        Comment: Workflow procesamiento deudas e infracciones con IA
+        StartAt: ListFiles
+        States:
+          ListFiles:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [list_files, Arn]
+            ResultPath: $.listing
+            Next: ProcessAll
+          ProcessAll:
+            Type: Map
+            ItemsPath: $.listing.files
+            MaxConcurrency: 5
+            Parameters:
+              file.$: $$.Map.Item.Value
+              instrucciones_s3.$: $.instrucciones_s3
+              email.$: $.email
+              execution_id.$: $.execution_id
+            Iterator:
+              StartAt: ProcessFile
+              States:
+                ProcessFile:
+                  Type: Task
+                  Resource:
+                    Fn::GetAtt: [process_file, Arn]
+                  Retry:
+                    - ErrorEquals: [States.ALL]
+                      IntervalSeconds: 3
+                      MaxAttempts: 2
+                      BackoffRate: 2.0
+                  End: true
+            ResultPath: $.results
+            Next: GenerateCsv
+          GenerateCsv:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [generate_csv, Arn]
+            ResultPath: $.csv
+            Next: SendEmail
+          SendEmail:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [send_email, Arn]
+            End: true
+
+resources:
+  Resources:
+    DeudasTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLE_DEUDAS}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: execution_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: execution_id-index
+            KeySchema:
+              - AttributeName: execution_id
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+
+    DeudasBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:provider.environment.BUCKET_DEUDAS}
+        CorsConfiguration:
+          CorsRules:
+            - AllowedHeaders: ["*"]
+              AllowedMethods: [GET, PUT, POST, HEAD]
+              AllowedOrigins: ["*"]

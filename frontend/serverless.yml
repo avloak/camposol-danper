@@ -1,0 +1,65 @@
+service: prontobus-web
+
+frameworkVersion: "4"
+
+provider:
+  name: aws
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+  iam:
+    role: arn:aws:iam::${aws:accountId}:role/LabRole
+
+plugins:
+  - serverless-s3-sync
+
+custom:
+  bucketName: prontobus-web-${sls:stage}-${aws:accountId}
+  s3Sync:
+    - bucketName: ${self:custom.bucketName}
+      localDir: dist
+      acl: public-read
+      defaultContentType: text/html
+
+resources:
+  Resources:
+    WebsiteBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:custom.bucketName}
+        WebsiteConfiguration:
+          IndexDocument: index.html
+          ErrorDocument: index.html
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: false
+          BlockPublicPolicy: false
+          IgnorePublicAcls: false
+          RestrictPublicBuckets: false
+        OwnershipControls:
+          Rules:
+            - ObjectOwnership: ObjectWriter
+        CorsConfiguration:
+          CorsRules:
+            - AllowedHeaders: ["*"]
+              AllowedMethods: [GET, HEAD]
+              AllowedOrigins: ["*"]
+              MaxAge: 3000
+
+    WebsiteBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: !Ref WebsiteBucket
+        PolicyDocument:
+          Statement:
+            - Sid: PublicReadGetObject
+              Effect: Allow
+              Principal: "*"
+              Action: s3:GetObject
+              Resource: !Sub "arn:aws:s3:::${self:custom.bucketName}/*"
+
+  Outputs:
+    WebsiteURL:
+      Description: URL pública del sitio
+      Value: !GetAtt WebsiteBucket.WebsiteURL
+    BucketName:
+      Description: Nombre del bucket
+      Value: !Ref WebsiteBucket

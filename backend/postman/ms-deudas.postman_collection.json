@@ -1,0 +1,99 @@
+{
+  "info": {
+    "name": "ProntoBus - ms-deudas",
+    "_postman_id": "b2f4d9f1-5678-4def-8888-deudas000001",
+    "description": "Colección Postman para probar el API de Workflow de deudas/infracciones (ms-deudas). Generado con GitHub Copilot - 2026-04-08",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://CHANGEME.execute-api.us-east-1.amazonaws.com/dev",
+      "type": "string"
+    },
+    {
+      "key": "executionArn",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "bucket",
+      "value": "ms-deudas-dev-bucket-CHANGEME",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Iniciar Workflow Deudas",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/deudas/workflow",
+          "host": ["{{baseUrl}}"],
+          "path": ["deudas", "workflow"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"instrucciones_s3\": \"s3://{{bucket}}/instrucciones/extraer.md\",\n  \"contenido_s3\":     \"s3://{{bucket}}/infracciones/\",\n  \"email\":            \"finanzas@prontobus.com\"\n}"
+        }
+      }
+    },
+    {
+      "name": "2. Estado del Workflow",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/deudas/workflow/{{executionArn}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["deudas", "workflow", "{{executionArn}}"]
+        }
+      }
+    },
+    {
+      "name": "3. API Agente IA Deudas (Groq)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/agente-ia/deudas",
+          "host": ["{{baseUrl}}"],
+          "path": ["agente-ia", "deudas"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"instrucciones_s3\": \"s3://{{bucket}}/instrucciones/extraer.md\",\n  \"contenido_s3\":     \"s3://{{bucket}}/infracciones/doc001.md\"\n}"
+        }
+      }
+    },
+    {
+      "name": "4. Ranking de Infractores",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/deudas/ranking",
+          "host": ["{{baseUrl}}"],
+          "path": ["deudas", "ranking"]
+        }
+      }
+    },
+    {
+      "name": "5. Deudas por Vencer",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/deudas/por-vencer?dias=7",
+          "host": ["{{baseUrl}}"],
+          "path": ["deudas", "por-vencer"],
+          "query": [
+            { "key": "dias", "value": "7" }
+          ]
+        }
+      }
+    }
+  ]
+}
