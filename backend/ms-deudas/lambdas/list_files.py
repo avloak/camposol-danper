@@ -1,4 +1,4 @@
-"""Step 1 - enumerar archivos .md de la carpeta S3 indicada."""
+"""Step 1 - enumerar archivos .md y .pdf de la carpeta S3 indicada."""
 import boto3
 
 s3 = boto3.client("s3")
@@ -23,7 +23,7 @@ def handler(event, context):
     for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
         for obj in page.get("Contents", []) or []:
             key = obj["Key"]
-            if key.endswith(".md"):
+            if key.endswith(".md") or key.endswith(".pdf"):
                 files.append(f"s3://{bucket}/{key}")
 
     return {"files": files, "count": len(files), "bucket": bucket, "prefix": prefix}

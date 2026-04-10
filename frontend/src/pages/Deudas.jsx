@@ -36,14 +36,14 @@ export default function Deudas() {
       <div className="card">
         <div className="card-title" style={{ fontSize: 16 }}>Iniciar Workflow</div>
         <div className="form-grid" style={{ marginTop: 16 }}>
-          <div className="full">
+          {/* <div className="full">
             <label>Ruta S3 archivo de instrucciones (Markdown)</label>
             <input value={form.instrucciones_s3} onChange={e => setForm({ ...form, instrucciones_s3: e.target.value })} />
           </div>
           <div className="full">
             <label>Ruta S3 carpeta con documentos de infracciones</label>
             <input value={form.contenido_s3} onChange={e => setForm({ ...form, contenido_s3: e.target.value })} />
-          </div>
+          </div> */}
           <div className="full">
             <label>Correo destinatario del reporte</label>
             <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />

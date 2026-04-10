@@ -2,6 +2,10 @@
 API Agente IA Prontobus (especialización: deudas / infracciones).
 """
 import os
+import sys
+# Ensure packages installed alongside this file (e.g. pdfminer) are importable
+sys.path.insert(0, os.path.dirname(__file__))
+
 import json
 import urllib.request
 import urllib.error
@@ -38,7 +42,25 @@ def parse_s3_uri(uri: str):
 def read_s3_text(uri: str) -> str:
     bucket, key = parse_s3_uri(uri)
     obj = s3.get_object(Bucket=bucket, Key=key)
-    return obj["Body"].read().decode("utf-8")
+    raw = obj["Body"].read()
+
+    if key.lower().endswith(".pdf"):
+        return _extract_pdf_text(raw)
+
+    for enc in ("utf-8", "utf-8-sig", "cp1252", "latin-1"):
+        try:
+            return raw.decode(enc)
+        except (UnicodeDecodeError, LookupError):
+            continue
+    return raw.decode("latin-1", errors="replace")
+
+
+def _extract_pdf_text(raw: bytes) -> str:
+    import io
+    from pypdf import PdfReader
+    reader = PdfReader(io.BytesIO(raw))
+    pages = [page.extract_text() or "" for page in reader.pages]
+    return "\n\n".join(pages)
 
 
 def call_groq(system_prompt: str, user_content: str) -> dict:
@@ -98,10 +120,33 @@ def handler(event, context):
 
     system_prompt = (
         "Eres un asistente experto en interpretar documentos de infracciones de tránsito "
-        "y deudas asociadas para una empresa de transporte público. Tu única salida debe ser "
-        "JSON válido. Para cada deuda extraída calcula la fecha límite de descuento "
-        "(habitualmente 5 días hábiles desde la fecha de notificación) y aplica las "
-        "instrucciones que recibas a continuación.\n\n"
+        "y deudas asociadas para una empresa de transporte público. "
+        "Tu única salida debe ser un objeto JSON válido con EXACTAMENTE estas dos claves de nivel superior:\n\n"
+        "{\n"
+        '  "ranking_infracciones": [\n'
+        '    {\n'
+        '      "dni": "<documento de identidad del conductor>",\n'
+        '      "cantidad_infracciones": <número entero>,\n'
+        '      "deuda_total_soles": <número decimal>,\n'
+        '      "ranking": <posición en ranking ordenado por deuda_total_soles descendente>\n'
+        '    }\n'
+        '  ],\n'
+        '  "deudas_por_vencer": [\n'
+        '    {\n'
+        '      "numero_documento": "<número de documento de infracción>",\n'
+        '      "dni": "<documento de identidad del conductor>",\n'
+        '      "fecha_infraccion": "<YYYY-MM-DD>",\n'
+        '      "codigo_infraccion": "<código>",\n'
+        '      "deuda_actual_soles": <número decimal con descuento aplicado si corresponde>\n'
+        '    }\n'
+        '  ]\n'
+        "}\n\n"
+        "Reglas:\n"
+        "- Para cada deuda calcula la fecha límite de descuento (5 días hábiles desde la fecha de notificación).\n"
+        "- Incluye en 'deudas_por_vencer' SOLO las deudas cuya fecha límite de descuento aún no ha vencido.\n"
+        "- Ordena 'ranking_infracciones' por deuda_total_soles de mayor a menor y asigna 'ranking' comenzando en 1.\n"
+        "- No incluyas ninguna clave adicional fuera de las dos indicadas.\n"
+        "- Aplica además las siguientes instrucciones específicas:\n\n"
         "INSTRUCCIONES:\n" + instrucciones
     )
 
