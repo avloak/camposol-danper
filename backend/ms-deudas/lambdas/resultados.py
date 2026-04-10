@@ -1,13 +1,14 @@
 """
 Endpoints de resultados del workflow IA de deudas:
   GET /deudas/resultados                → lista CSVs en s3://<bucket>/resultados/
-  GET /deudas/resultados/{key+}/download → presigned URL para descargar el CSV
+  GET /deudas/resultados/download/{key+} → presigned URL para descargar el CSV
 
 La URL presigned tiene validez de 5 minutos y permite que el navegador
 descargue directamente el archivo sin exponer credenciales de AWS.
 """
 import os
 import json
+from urllib.parse import unquote_plus
 
 import boto3
 
@@ -50,7 +51,7 @@ def listar(event, context):
 
 def descargar(event, context):
     params = event.get("pathParameters") or {}
-    key = params.get("key")
+    key = unquote_plus(params.get("key") or "")
     if not key:
         return respond(400, {"error": "Se requiere la key del archivo"})
 

@@ -11,7 +11,7 @@ provider:
   region: us-east-1
   stage: ${opt:stage, 'dev'}
   memorySize: 512
-  timeout: 60
+  timeout: 29
   iam:
     role: arn:aws:iam::${aws:accountId}:role/LabRole
   environment:
@@ -23,14 +23,12 @@ provider:
     SENDGRID_API_KEY: ${env:SENDGRID_API_KEY}
     SENDGRID_FROM_EMAIL: ${env:SENDGRID_FROM_EMAIL}
     AGENTE_IA_URL: ""   # se rellena tras primer deploy si se quiere usar HTTP en vez de invoke
-    STATE_MACHINE_ARN: !Ref WorkflowDescansosStepFunctionsStateMachine
+    STATE_MACHINE_ARN: arn:aws:states:${aws:region}:${aws:accountId}:stateMachine:${self:service}-${sls:stage}-workflow
 
 functions:
   # ----- Endpoint API que arranca el workflow -----
   start_workflow:
     handler: lambdas/start_workflow.handler
-    environment:
-      STATE_MACHINE_ARN: !Ref WorkflowDescansosStepFunctionsStateMachine
     events:
       - http:
           path: /descansos/workflow
@@ -57,15 +55,19 @@ functions:
   # ----- Lambdas internas del workflow -----
   list_files:
     handler: lambdas/list_files.handler
+    timeout: 60
 
   process_file:
     handler: lambdas/process_file.handler
+    timeout: 60
 
   generate_csv:
     handler: lambdas/generate_csv.handler
+    timeout: 60
 
   send_email:
     handler: lambdas/send_email.handler
+    timeout: 60
 
   # ----- Endpoints CRUD + aprobación de Solicitudes de Descanso Médico -----
   solicitudes_listar:
@@ -107,12 +109,13 @@ functions:
   resultados_descargar:
     handler: lambdas/resultados.descargar
     events:
-      - http: { path: "/descansos/resultados/{key+}/download", method: get, cors: true }
+      - http: { path: "/descansos/resultados/download/{key+}", method: get, cors: true }
 
 stepFunctions:
   stateMachines:
     workflowDescansos:
       name: ms-descansos-${sls:stage}-workflow
+      role: arn:aws:iam::${aws:accountId}:role/LabRole
       definition:
         Comment: Workflow procesamiento descansos médicos con IA
         StartAt: ListFiles

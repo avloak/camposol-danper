@@ -1,7 +1,7 @@
 """
 Endpoints de resultados del workflow IA de descansos:
   GET /descansos/resultados                → lista CSVs en s3://<bucket>/resultados/
-  GET /descansos/resultados/{key+}/download → presigned URL para descargar el CSV
+  GET /descansos/resultados/download/{key+} → presigned URL para descargar el CSV
 
 La URL presigned tiene validez de 5 minutos y permite que el navegador
 descargue directamente el archivo sin exponer credenciales de AWS.

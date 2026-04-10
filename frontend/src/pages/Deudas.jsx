@@ -4,8 +4,8 @@ import ResultadosCsv from '../components/ResultadosCsv.jsx';
 
 export default function Deudas() {
   const [form, setForm] = useState({
-    instrucciones_s3: 's3://prontobus-deudas/instrucciones/extraer.md',
-    contenido_s3: 's3://prontobus-deudas/infracciones/',
+    instrucciones_s3: import.meta.env.VITE_DEUDAS_INSTRUCCIONES_S3 || '',
+    contenido_s3: import.meta.env.VITE_DEUDAS_CONTENIDO_S3 || '',
     email: ''
   });
   const [running, setRunning] = useState(false);
