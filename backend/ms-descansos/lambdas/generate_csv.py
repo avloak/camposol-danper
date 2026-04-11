@@ -28,9 +28,34 @@ def _flat_keys(d, parent="", out=None):
     return out
 
 
+def _make_csv(rows: list[dict], fieldnames: list[str]) -> str:
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=fieldnames, delimiter=";", extrasaction="ignore")
+    writer.writeheader()
+    for row in rows:
+        writer.writerow({k: row.get(k, "") for k in fieldnames})
+    return buf.getvalue()
+
+
+def _upload(key: str, csv_text: str) -> dict:
+    s3.put_object(
+        Bucket=BUCKET,
+        Key=key,
+        Body=csv_text.encode("utf-8"),
+        ContentType="text/csv; charset=utf-8",
+    )
+    return {
+        "bucket": BUCKET,
+        "key": key,
+        "s3_uri": f"s3://{BUCKET}/{key}",
+        "filename": key.split("/")[-1],
+    }
+
+
 def handler(event, context):
     execution_id = event["execution_id"]
     results = event.get("results", [])
+    ts = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
 
     rows = []
     keys = set()
@@ -43,27 +68,7 @@ def handler(event, context):
 
     fieldnames = ["id", "archivo"] + sorted(k for k in keys if k not in ("id", "archivo"))
 
-    buf = io.StringIO()
-    writer = csv.DictWriter(buf, fieldnames=fieldnames, delimiter=";")
-    writer.writeheader()
-    for r in rows:
-        writer.writerow({k: r.get(k, "") for k in fieldnames})
-
-    csv_text = buf.getvalue()
-    ts = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
     key = f"resultados/descansos-{execution_id}-{ts}.csv"
-    s3.put_object(
-        Bucket=BUCKET,
-        Key=key,
-        Body=csv_text.encode("utf-8"),
-        ContentType="text/csv; charset=utf-8",
-    )
+    info = _upload(key, _make_csv(rows, fieldnames))
 
-    return {
-        "bucket": BUCKET,
-        "key": key,
-        "s3_uri": f"s3://{BUCKET}/{key}",
-        "filename": key.split("/")[-1],
-        "rows": len(rows),
-        "csv_b64_len": len(csv_text),
-    }
+    return {**info, "rows": len(rows)}

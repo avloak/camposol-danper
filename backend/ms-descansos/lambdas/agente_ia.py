@@ -1,17 +1,11 @@
 """
 API Agente IA Prontobus (especialización: descansos médicos).
-Recibe la ruta de un archivo de instrucciones y la ruta de un archivo de contenido,
-ambos en S3 y formato Markdown. Llama al API de Groq (llama-3.3-70b-versatile)
-y devuelve el resultado estructurado en JSON.
-
-POST /agente-ia/descansos
-Body:
-  {
-    "instrucciones_s3": "s3://bucket/instrucciones.md",
-    "contenido_s3":     "s3://bucket/cert/cert001.md"
-  }
 """
 import os
+import sys
+# Ensure packages installed alongside this file are importable
+sys.path.insert(0, os.path.dirname(__file__))
+
 import json
 import urllib.request
 import urllib.error
@@ -48,7 +42,14 @@ def parse_s3_uri(uri: str):
 def read_s3_text(uri: str) -> str:
     bucket, key = parse_s3_uri(uri)
     obj = s3.get_object(Bucket=bucket, Key=key)
-    return obj["Body"].read().decode("utf-8")
+    raw = obj["Body"].read()
+
+    for enc in ("utf-8", "utf-8-sig", "cp1252", "latin-1"):
+        try:
+            return raw.decode(enc)
+        except (UnicodeDecodeError, LookupError):
+            continue
+    return raw.decode("latin-1", errors="replace")
 
 
 def call_groq(system_prompt: str, user_content: str) -> dict:
@@ -68,11 +69,12 @@ def call_groq(system_prompt: str, user_content: str) -> dict:
         method="POST",
         headers={
             "Authorization": f"Bearer {GROQ_API_KEY}",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Content-Type": "application/json",
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=45) as resp:
+        with urllib.request.urlopen(req, timeout=240) as resp:
             body = resp.read().decode("utf-8")
             parsed = json.loads(body)
             content = parsed["choices"][0]["message"]["content"]

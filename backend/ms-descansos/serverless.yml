@@ -22,7 +22,6 @@ provider:
     GROQ_MODEL: llama-3.3-70b-versatile
     SENDGRID_API_KEY: ${env:SENDGRID_API_KEY}
     SENDGRID_FROM_EMAIL: ${env:SENDGRID_FROM_EMAIL}
-    AGENTE_IA_URL: ""   # se rellena tras primer deploy si se quiere usar HTTP en vez de invoke
     STATE_MACHINE_ARN: arn:aws:states:${aws:region}:${aws:accountId}:stateMachine:${self:service}-${sls:stage}-workflow
 
 functions:
@@ -43,12 +42,20 @@ functions:
           method: get
           cors: true
 
-  # ----- Endpoint API "Agente IA prontobus" -----
   agente_ia:
     handler: lambdas/agente_ia.handler
     events:
       - http:
           path: /agente-ia/descansos
+          method: post
+          cors: true
+
+  upload_url:
+    handler: lambdas/upload_url.handler
+    timeout: 60
+    events:
+      - http:
+          path: /descansos/upload-url
           method: post
           cors: true
 
@@ -59,7 +66,7 @@ functions:
 
   process_file:
     handler: lambdas/process_file.handler
-    timeout: 60
+    timeout: 300
 
   generate_csv:
     handler: lambdas/generate_csv.handler
@@ -122,8 +129,7 @@ stepFunctions:
         States:
           ListFiles:
             Type: Task
-            Resource:
-              Fn::GetAtt: [list_files, Arn]
+            Resource: arn:aws:lambda:${aws:region}:${aws:accountId}:function:${self:service}-${sls:stage}-list_files
             ResultPath: $.listing
             Next: ProcessAll
           ProcessAll:
@@ -140,8 +146,7 @@ stepFunctions:
               States:
                 ProcessFile:
                   Type: Task
-                  Resource:
-                    Fn::GetAtt: [process_file, Arn]
+                  Resource: arn:aws:lambda:${aws:region}:${aws:accountId}:function:${self:service}-${sls:stage}-process_file
                   Retry:
                     - ErrorEquals: [States.ALL]
                       IntervalSeconds: 3
@@ -152,14 +157,12 @@ stepFunctions:
             Next: GenerateCsv
           GenerateCsv:
             Type: Task
-            Resource:
-              Fn::GetAtt: [generate_csv, Arn]
+            Resource: arn:aws:lambda:${aws:region}:${aws:accountId}:function:${self:service}-${sls:stage}-generate_csv
             ResultPath: $.csv
             Next: SendEmail
           SendEmail:
             Type: Task
-            Resource:
-              Fn::GetAtt: [send_email, Arn]
+            Resource: arn:aws:lambda:${aws:region}:${aws:accountId}:function:${self:service}-${sls:stage}-send_email
             End: true
 
 resources:
