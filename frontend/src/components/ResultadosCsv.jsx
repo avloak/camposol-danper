@@ -31,7 +31,7 @@ export default function ResultadosCsv({ api, basePath, title = 'Resultados CSV' 
     setDownloading(item.key);
     try {
       // pedimos presigned URL y el navegador baja el archivo
-      const r = await api.get(`${basePath}/resultados/${encodeURIComponent(item.key)}/download`);
+      const r = await api.get(`${basePath}/resultados/download/${encodeURIComponent(item.key)}`);
       const url = r.data?.url;
       if (!url) throw new Error('No se obtuvo URL');
       // Forzamos la descarga con un <a> temporal

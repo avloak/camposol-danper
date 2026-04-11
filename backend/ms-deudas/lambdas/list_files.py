@@ -1,4 +1,4 @@
-"""Step 1 - enumerar archivos .md de la carpeta S3 indicada."""
+"""Step 1 - enumerar archivos .md y .pdf de la carpeta S3 indicada."""
 import boto3
 
 s3 = boto3.client("s3")

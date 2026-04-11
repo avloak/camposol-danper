@@ -11,7 +11,7 @@ provider:
   region: us-east-1
   stage: ${opt:stage, 'dev'}
   memorySize: 512
-  timeout: 60
+  timeout: 29
   iam:
     role: arn:aws:iam::${aws:accountId}:role/LabRole
   environment:
@@ -21,13 +21,11 @@ provider:
     GROQ_MODEL: llama-3.3-70b-versatile
     SENDGRID_API_KEY: ${env:SENDGRID_API_KEY}
     SENDGRID_FROM_EMAIL: ${env:SENDGRID_FROM_EMAIL}
-    STATE_MACHINE_ARN: !Ref WorkflowDeudasStepFunctionsStateMachine
+    STATE_MACHINE_ARN: arn:aws:states:${aws:region}:${aws:accountId}:stateMachine:${self:service}-${sls:stage}-workflow
 
 functions:
   start_workflow:
     handler: lambdas/start_workflow.handler
-    environment:
-      STATE_MACHINE_ARN: !Ref WorkflowDeudasStepFunctionsStateMachine
     events:
       - http:
           path: /deudas/workflow
@@ -58,6 +56,15 @@ functions:
           method: get
           cors: true
 
+  upload_url:
+    handler: lambdas/upload_url.handler
+    timeout: 60
+    events:
+      - http:
+          path: /deudas/upload-url
+          method: post
+          cors: true
+
   agente_ia:
     handler: lambdas/agente_ia.handler
     events:
@@ -75,24 +82,29 @@ functions:
   resultados_descargar:
     handler: lambdas/resultados.descargar
     events:
-      - http: { path: /deudas/resultados/{key+}/download, method: get, cors: true }
+      - http: { path: "/deudas/resultados/download/{key+}", method: get, cors: true }
 
   list_files:
     handler: lambdas/list_files.handler
+    timeout: 60
 
   process_file:
     handler: lambdas/process_file.handler
+    timeout: 300
 
   generate_csv:
     handler: lambdas/generate_csv.handler
+    timeout: 60
 
   send_email:
     handler: lambdas/send_email.handler
+    timeout: 60
 
 stepFunctions:
   stateMachines:
     workflowDeudas:
       name: ms-deudas-${sls:stage}-workflow
+      role: arn:aws:iam::${aws:accountId}:role/LabRole
       definition:
         Comment: Workflow procesamiento deudas e infracciones con IA
         StartAt: ListFiles
@@ -169,5 +181,7 @@ resources:
         CorsConfiguration:
           CorsRules:
             - AllowedHeaders: ["*"]
-              AllowedMethods: [GET, PUT, POST, HEAD]
+              AllowedMethods: [GET, PUT, POST, HEAD, DELETE]
               AllowedOrigins: ["*"]
+              ExposedHeaders: [ETag]
+              MaxAge: 3000

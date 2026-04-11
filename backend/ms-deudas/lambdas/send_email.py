@@ -18,7 +18,7 @@ SENDGRID_FROM_EMAIL = os.environ["SENDGRID_FROM_EMAIL"]
 SENDGRID_URL = "https://api.sendgrid.com/v3/mail/send"
 
 
-def _build_html(execution_id: str, rows: int, filename: str) -> str:
+def _build_html(execution_id: str, ranking_rows: int, vencer_rows: int) -> str:
     ahora = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
     return f"""<!DOCTYPE html>
 <html lang="es">
@@ -46,9 +46,9 @@ def _build_html(execution_id: str, rows: int, filename: str) -> str:
             <td style="padding:32px 32px 8px 32px;">
               <h2 style="margin:0 0 8px 0;color:#212529;font-size:20px;font-weight:600;">📊 Procesamiento completado</h2>
               <p style="margin:0;color:#6c757d;font-size:14px;line-height:1.6;">
-                El workflow de IA finalizó exitosamente. Adjunto encontrarás el archivo CSV con el
-                detalle de las deudas extraídas por el modelo <strong>Llama 3.3 70B</strong>,
-                incluyendo fechas límite de descuento y ranking de infractores.
+                El workflow de IA finalizó exitosamente. Adjunto encontrarás dos archivos CSV con el
+                detalle extraído por el modelo <strong>Llama 3.3 70B</strong>:
+                el ranking de infractores y las deudas próximas a vencer.
               </p>
             </td>
           </tr>
@@ -60,20 +60,20 @@ def _build_html(execution_id: str, rows: int, filename: str) -> str:
                 <tr>
                   <td width="33%" style="padding:4px;">
                     <div style="background:#fff3cd;border-left:4px solid #ffc107;border-radius:8px;padding:14px;">
-                      <div style="font-size:11px;color:#6c757d;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Filas</div>
-                      <div style="font-size:22px;color:#664d03;font-weight:700;margin-top:4px;">{rows}</div>
+                      <div style="font-size:11px;color:#6c757d;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Ranking</div>
+                      <div style="font-size:22px;color:#664d03;font-weight:700;margin-top:4px;">{ranking_rows} filas</div>
+                    </div>
+                  </td>
+                  <td width="33%" style="padding:4px;">
+                    <div style="background:#f8d7da;border-left:4px solid #dc3545;border-radius:8px;padding:14px;">
+                      <div style="font-size:11px;color:#6c757d;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Por Vencer</div>
+                      <div style="font-size:22px;color:#842029;font-weight:700;margin-top:4px;">{vencer_rows} filas</div>
                     </div>
                   </td>
                   <td width="33%" style="padding:4px;">
                     <div style="background:#d1e7dd;border-left:4px solid #198754;border-radius:8px;padding:14px;">
                       <div style="font-size:11px;color:#6c757d;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Estado</div>
                       <div style="font-size:14px;color:#0f5132;font-weight:700;margin-top:4px;">✓ Éxito</div>
-                    </div>
-                  </td>
-                  <td width="33%" style="padding:4px;">
-                    <div style="background:#f8d7da;border-left:4px solid #dc3545;border-radius:8px;padding:14px;">
-                      <div style="font-size:11px;color:#6c757d;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Modelo</div>
-                      <div style="font-size:13px;color:#842029;font-weight:700;margin-top:4px;">Llama 3.3 70B</div>
                     </div>
                   </td>
                 </tr>
@@ -86,7 +86,6 @@ def _build_html(execution_id: str, rows: int, filename: str) -> str:
             <td style="padding:20px 32px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f8f9fa;border-radius:8px;">
                 <tr><td style="padding:12px 16px;border-bottom:1px solid #e9ecef;font-size:13px;color:#495057;"><strong>📋 Ejecución:</strong> <span style="color:#6c757d;font-family:monospace;">{execution_id}</span></td></tr>
-                <tr><td style="padding:12px 16px;border-bottom:1px solid #e9ecef;font-size:13px;color:#495057;"><strong>📄 Archivo:</strong> <span style="color:#6c757d;font-family:monospace;">{filename}</span></td></tr>
                 <tr><td style="padding:12px 16px;font-size:13px;color:#495057;"><strong>🕐 Fecha:</strong> <span style="color:#6c757d;">{ahora}</span></td></tr>
               </table>
             </td>
@@ -104,13 +103,13 @@ def _build_html(execution_id: str, rows: int, filename: str) -> str:
             </td>
           </tr>
 
-          <!-- Aviso adjunto -->
+          <!-- Aviso adjuntos -->
           <tr>
             <td style="padding:0 32px 24px 32px;">
               <div style="background:#cfe2ff;border-radius:8px;padding:16px;text-align:center;">
                 <div style="font-size:24px;margin-bottom:4px;">📎</div>
                 <p style="margin:0;color:#084298;font-size:14px;font-weight:600;">
-                  El archivo <strong>{filename}</strong> está adjunto a este correo.
+                  Se adjuntan <strong>2 archivos CSV</strong>: ranking de infractores y deudas por vencer.
                 </p>
               </div>
             </td>
@@ -138,14 +137,17 @@ def handler(event, context):
     email = event["email"]
     execution_id = event["execution_id"]
 
-    obj = s3.get_object(Bucket=csv_meta["bucket"], Key=csv_meta["key"])
-    csv_bytes = obj["Body"].read()
-    b64 = base64.b64encode(csv_bytes).decode("utf-8")
+    ranking_meta = csv_meta["ranking_infracciones"]
+    vencer_meta  = csv_meta["deudas_por_vencer"]
+
+    def _encode(meta):
+        obj = s3.get_object(Bucket=meta["bucket"], Key=meta["key"])
+        return base64.b64encode(obj["Body"].read()).decode("utf-8")
 
     html = _build_html(
         execution_id=execution_id,
-        rows=csv_meta.get("rows", 0),
-        filename=csv_meta["filename"],
+        ranking_rows=ranking_meta.get("rows", 0),
+        vencer_rows=vencer_meta.get("rows", 0),
     )
 
     payload = {
@@ -155,12 +157,20 @@ def handler(event, context):
         }],
         "from": {"email": SENDGRID_FROM_EMAIL, "name": "ProntoBus"},
         "content": [{"type": "text/html", "value": html}],
-        "attachments": [{
-            "content": b64,
-            "filename": csv_meta["filename"],
-            "type": "text/csv",
-            "disposition": "attachment",
-        }],
+        "attachments": [
+            {
+                "content": _encode(ranking_meta),
+                "filename": ranking_meta["filename"],
+                "type": "text/csv",
+                "disposition": "attachment",
+            },
+            {
+                "content": _encode(vencer_meta),
+                "filename": vencer_meta["filename"],
+                "type": "text/csv",
+                "disposition": "attachment",
+            },
+        ],
     }
 
     data = json.dumps(payload).encode("utf-8")
@@ -179,14 +189,11 @@ def handler(event, context):
                 "status": "OK",
                 "http": resp.status,
                 "to": email,
-                "csv": csv_meta["s3_uri"],
+                "ranking_csv": ranking_meta["s3_uri"],
+                "vencer_csv": vencer_meta["s3_uri"],
             }
     except urllib.error.HTTPError as e:
-        return {
-            "status": "ERROR",
-            "http": e.code,
-            "detail": e.read().decode("utf-8", "ignore"),
-            "to": email,
-        }
+        detail = e.read().decode("utf-8", "ignore")
+        raise RuntimeError(f"SendGrid HTTP {e.code}: {detail}")
     except urllib.error.URLError as e:
-        return {"status": "ERROR", "detail": str(e.reason), "to": email}
+        raise RuntimeError(f"SendGrid connection error: {e.reason}")

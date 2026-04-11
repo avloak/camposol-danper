@@ -29,17 +29,17 @@ functions:
   obtener:
     handler: handler.obtener
     events:
-      - http: { path: /horarios/{id}, method: get, cors: true }
+      - http: { path: "/horarios/{id}", method: get, cors: true }
 
   actualizar:
     handler: handler.actualizar
     events:
-      - http: { path: /horarios/{id}, method: put, cors: true }
+      - http: { path: "/horarios/{id}", method: put, cors: true }
 
   eliminar:
     handler: handler.eliminar
     events:
-      - http: { path: /horarios/{id}, method: delete, cors: true }
+      - http: { path: "/horarios/{id}", method: delete, cors: true }
 
   asignar:
     handler: handler.asignar_automatico
