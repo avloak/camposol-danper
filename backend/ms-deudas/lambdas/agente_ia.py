@@ -56,11 +56,23 @@ def read_s3_text(uri: str) -> str:
 
 
 def _extract_pdf_text(raw: bytes) -> str:
-    import io
-    from pypdf import PdfReader
-    reader = PdfReader(io.BytesIO(raw))
-    pages = [page.extract_text() or "" for page in reader.pages]
-    return "\n\n".join(pages)
+    import re
+    import tempfile
+    import pymupdf4llm
+
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        tmp.write(raw)
+        tmp_path = tmp.name
+
+    try:
+        text = pymupdf4llm.to_markdown(tmp_path)
+    finally:
+        import os as _os
+        _os.unlink(tmp_path)
+
+    # Collapse excessive blank lines
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
 
 
 def call_groq(system_prompt: str, user_content: str) -> dict:
