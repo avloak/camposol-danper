@@ -172,11 +172,7 @@ def handler(event, context):
                 "csv": csv_meta["s3_uri"],
             }
     except urllib.error.HTTPError as e:
-        return {
-            "status": "ERROR",
-            "http": e.code,
-            "detail": e.read().decode("utf-8", "ignore"),
-            "to": email,
-        }
+        detail = e.read().decode("utf-8", "ignore")
+        raise RuntimeError(f"SendGrid HTTP {e.code}: {detail}")
     except urllib.error.URLError as e:
-        return {"status": "ERROR", "detail": str(e.reason), "to": email}
+        raise RuntimeError(f"SendGrid connection error: {e.reason}")

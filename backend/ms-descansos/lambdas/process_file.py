@@ -1,6 +1,5 @@
 """
-Step Map iterator: por cada archivo, invoca al Api Agente IA Prontobus
-(internamente la lambda agente_ia) y guarda el resultado en DynamoDB.
+Map iterator: invoca al Agente IA Prontobus por archivo y persiste en DynamoDB.
 
 Adicionalmente, si la IA logra extraer los campos de un certificado médico
 (paciente, dni, médico, cmp, diagnóstico, fechas), crea automáticamente
@@ -8,6 +7,9 @@ una entrada en la tabla de SOLICITUDES con estado PENDIENTE para que
 el administrador pueda aprobarla o rechazarla desde el frontend.
 """
 import os
+import sys
+sys.path.insert(0, os.path.dirname(__file__))
+
 import json
 import uuid
 from datetime import datetime
@@ -121,6 +123,9 @@ def handler(event, context):
         api_body = json.loads(api_resp["body"])
     except Exception:
         api_body = {"error": "respuesta invalida del agente"}
+
+    if api_resp.get("statusCode") != 200:
+        raise RuntimeError(f"Agente IA falló [{api_resp.get('statusCode')}]: {api_body.get('error', api_body)}")
 
     resultado = api_body.get("resultado", {}) or {}
 

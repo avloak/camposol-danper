@@ -8,6 +8,7 @@ descargue directamente el archivo sin exponer credenciales de AWS.
 """
 import os
 import json
+from urllib.parse import unquote_plus
 
 import boto3
 
@@ -52,7 +53,7 @@ def listar(event, context):
 def descargar(event, context):
     """Devuelve una presigned URL (GET) para descargar el CSV desde el navegador."""
     params = event.get("pathParameters") or {}
-    key = params.get("key")
+    key = unquote_plus(params.get("key") or "")
     if not key:
         return respond(400, {"error": "Se requiere la key del archivo"})
 

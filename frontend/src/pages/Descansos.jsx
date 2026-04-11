@@ -1,17 +1,26 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { descansosApi } from '../services/api.js';
 import ResultadosCsv from '../components/ResultadosCsv.jsx';
 
+const PDF_S3_BASE = import.meta.env.VITE_DESCANSOS_PDF_S3 || 's3://ms-descansos-dev-bucket-985495523801/pdfs/';
+
 export default function Descansos() {
   const [form, setForm] = useState({
-    instrucciones_s3: 's3://prontobus-descansos/instrucciones/extraer.md',
-    contenido_s3: 's3://prontobus-descansos/certificados/',
+    instrucciones_s3: import.meta.env.VITE_DESCANSOS_INSTRUCCIONES_S3 || '',
+    contenido_s3: import.meta.env.VITE_DESCANSOS_CONTENIDO_S3 || '',
     email: ''
   });
   const [running, setRunning] = useState(false);
   const [resp, setResp] = useState(null);
   const [err, setErr] = useState(null);
+
+  // PDF upload state
+  const [pdfFiles, setPdfFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadResults, setUploadResults] = useState([]);
+  const [uploadErr, setUploadErr] = useState(null);
+  const fileInputRef = useRef(null);
 
   const start = async () => {
     setRunning(true); setResp(null); setErr(null);
@@ -23,6 +32,45 @@ export default function Descansos() {
     } finally { setRunning(false); }
   };
 
+  const onFilesChange = (e) => {
+    const selected = Array.from(e.target.files).filter(f => f.type === 'application/pdf');
+    setPdfFiles(selected);
+    setUploadResults([]);
+    setUploadErr(null);
+  };
+
+  const readAsBase64 = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  const uploadPdfs = async () => {
+    if (!pdfFiles.length) return;
+    setUploading(true); setUploadResults([]); setUploadErr(null);
+
+    const results = [];
+    for (const file of pdfFiles) {
+      try {
+        const content = await readAsBase64(file);
+        const { data } = await descansosApi.post('/descansos/upload-url', {
+          filename: file.name,
+          content,
+        });
+        results.push({ name: file.name, s3_uri: data.s3_uri, ok: true });
+      } catch (e) {
+        const msg = e?.response?.data?.error || e.message;
+        results.push({ name: file.name, error: msg, ok: false });
+      }
+    }
+
+    setUploadResults(results);
+    setUploading(false);
+    setPdfFiles([]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   return (
     <div>
       <div className="card">
@@ -32,26 +80,61 @@ export default function Descansos() {
             <button className="btn-secondary">📋 Ver Solicitudes para Aprobación</button>
           </Link>
         </div>
-        <p style={{ color: '#666' }}>
+        <p style={{ marginTop: 8, color: '#666' }}>
           Workflow asíncrono que procesa certificados médicos en formato Markdown desde un bucket S3,
-          extrae la información usando IA (Groq + Llama 3.3 70B), almacena resultados en DynamoDB,
-          actualiza horarios afectados y envía un reporte CSV por correo. Cada certificado extraído
-          genera automáticamente una <strong>solicitud PENDIENTE</strong> que el administrador debe
-          aprobar o rechazar desde la pantalla de Solicitudes.
+          extrae la información usando IA (Groq + Llama 3.3 70B), almacena resultados en DynamoDB y
+          envía un reporte CSV por correo. Cada certificado extraído genera automáticamente una{' '}
+          <strong>solicitud PENDIENTE</strong> que el administrador debe aprobar o rechazar.
         </p>
       </div>
 
+      {/* PDF Upload */}
+      <div className="card">
+        <div className="card-title" style={{ fontSize: 16 }}>📄 Subir PDFs al Bucket S3</div>
+        <p style={{ marginTop: 4, marginBottom: 12, color: '#666', fontSize: 13 }}>
+          Destino: <code>{PDF_S3_BASE}</code>
+        </p>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/pdf"
+            multiple
+            onChange={onFilesChange}
+          />
+          <button
+            className="btn-primary"
+            disabled={uploading || !pdfFiles.length}
+            onClick={uploadPdfs}
+          >
+            {uploading ? 'Subiendo...' : `Subir ${pdfFiles.length ? `(${pdfFiles.length})` : ''}`}
+          </button>
+        </div>
+
+        {uploadErr && <div className="alert alert-danger" style={{ marginTop: 12 }}>{uploadErr}</div>}
+
+        {uploadResults.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            {uploadResults.map((r, i) => (
+              <div
+                key={i}
+                className={`alert ${r.ok ? 'alert-success' : 'alert-danger'}`}
+                style={{ marginBottom: 6, padding: '8px 12px', fontSize: 13 }}
+              >
+                {r.ok
+                  ? <span>✅ <strong>{r.name}</strong> → <code>{PDF_S3_BASE}</code></span>
+                  : <span>❌ <strong>{r.name}</strong>: {r.error}</span>
+                }
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Workflow */}
       <div className="card">
         <div className="card-title" style={{ fontSize: 16 }}>Iniciar Workflow</div>
         <div className="form-grid" style={{ marginTop: 16 }}>
-          <div className="full">
-            <label>Ruta S3 archivo de instrucciones (Markdown)</label>
-            <input value={form.instrucciones_s3} onChange={e => setForm({ ...form, instrucciones_s3: e.target.value })} />
-          </div>
-          <div className="full">
-            <label>Ruta S3 carpeta con certificados (Markdown)</label>
-            <input value={form.contenido_s3} onChange={e => setForm({ ...form, contenido_s3: e.target.value })} />
-          </div>
           <div className="full">
             <label>Correo destinatario del reporte</label>
             <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
