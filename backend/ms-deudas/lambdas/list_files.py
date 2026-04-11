@@ -23,7 +23,7 @@ def handler(event, context):
     for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
         for obj in page.get("Contents", []) or []:
             key = obj["Key"]
-            if key.endswith(".md") or key.endswith(".pdf"):
+            if key.endswith(".md"):
                 files.append(f"s3://{bucket}/{key}")
 
     return {"files": files, "count": len(files), "bucket": bucket, "prefix": prefix}

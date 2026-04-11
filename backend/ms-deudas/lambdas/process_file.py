@@ -2,6 +2,9 @@
 Map iterator: invoca al Agente IA Prontobus por archivo y persiste en DynamoDB.
 """
 import os
+import sys
+sys.path.insert(0, os.path.dirname(__file__))
+
 import json
 import uuid
 from datetime import datetime
@@ -44,6 +47,9 @@ def handler(event, context):
         api_body = json.loads(api_resp["body"])
     except Exception:
         api_body = {"error": "respuesta invalida del agente"}
+
+    if api_resp.get("statusCode") != 200:
+        raise RuntimeError(f"Agente IA falló [{api_resp.get('statusCode')}]: {api_body.get('error', api_body)}")
 
     item_id = str(uuid.uuid4())
     item = {

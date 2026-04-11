@@ -44,35 +44,12 @@ def read_s3_text(uri: str) -> str:
     obj = s3.get_object(Bucket=bucket, Key=key)
     raw = obj["Body"].read()
 
-    if key.lower().endswith(".pdf"):
-        return _extract_pdf_text(raw)
-
     for enc in ("utf-8", "utf-8-sig", "cp1252", "latin-1"):
         try:
             return raw.decode(enc)
         except (UnicodeDecodeError, LookupError):
             continue
     return raw.decode("latin-1", errors="replace")
-
-
-def _extract_pdf_text(raw: bytes) -> str:
-    import re
-    import tempfile
-    import pymupdf4llm
-
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-        tmp.write(raw)
-        tmp_path = tmp.name
-
-    try:
-        text = pymupdf4llm.to_markdown(tmp_path)
-    finally:
-        import os as _os
-        _os.unlink(tmp_path)
-
-    # Collapse excessive blank lines
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    return text.strip()
 
 
 def call_groq(system_prompt: str, user_content: str) -> dict:
@@ -92,11 +69,12 @@ def call_groq(system_prompt: str, user_content: str) -> dict:
         method="POST",
         headers={
             "Authorization": f"Bearer {GROQ_API_KEY}",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Content-Type": "application/json",
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=45) as resp:
+        with urllib.request.urlopen(req, timeout=240) as resp:
             body = resp.read().decode("utf-8")
             parsed = json.loads(body)
             content = parsed["choices"][0]["message"]["content"]
@@ -131,34 +109,34 @@ def handler(event, context):
         return respond(500, {"error": f"Error leyendo S3: {e}"})
 
     system_prompt = (
-        "Eres un asistente experto en interpretar documentos de infracciones de tránsito "
-        "y deudas asociadas para una empresa de transporte público. "
-        "Tu única salida debe ser un objeto JSON válido con EXACTAMENTE estas dos claves de nivel superior:\n\n"
-        "{\n"
-        '  "ranking_infracciones": [\n'
-        '    {\n'
-        '      "dni": "<documento de identidad del conductor>",\n'
-        '      "cantidad_infracciones": <número entero>,\n'
-        '      "deuda_total_soles": <número decimal>,\n'
-        '      "ranking": <posición en ranking ordenado por deuda_total_soles descendente>\n'
-        '    }\n'
-        '  ],\n'
-        '  "deudas_por_vencer": [\n'
-        '    {\n'
-        '      "numero_documento": "<número de documento de infracción>",\n'
-        '      "dni": "<documento de identidad del conductor>",\n'
-        '      "fecha_infraccion": "<YYYY-MM-DD>",\n'
-        '      "codigo_infraccion": "<código>",\n'
-        '      "deuda_actual_soles": <número decimal con descuento aplicado si corresponde>\n'
-        '    }\n'
-        '  ]\n'
-        "}\n\n"
-        "Reglas:\n"
-        "- Para cada deuda calcula la fecha límite de descuento (5 días hábiles desde la fecha de notificación).\n"
-        "- Incluye en 'deudas_por_vencer' SOLO las deudas cuya fecha límite de descuento aún no ha vencido.\n"
-        "- Ordena 'ranking_infracciones' por deuda_total_soles de mayor a menor y asigna 'ranking' comenzando en 1.\n"
-        "- No incluyas ninguna clave adicional fuera de las dos indicadas.\n"
-        "- Aplica además las siguientes instrucciones específicas:\n\n"
+        # "Eres un asistente experto en interpretar documentos de infracciones de tránsito "
+        # "y deudas asociadas para una empresa de transporte público. "
+        # "Tu única salida debe ser un objeto JSON válido con EXACTAMENTE estas dos claves de nivel superior:\n\n"
+        # "{\n"
+        # '  "ranking_infracciones": [\n'
+        # '    {\n'
+        # '      "dni": "<documento de identidad del conductor>",\n'
+        # '      "cantidad_infracciones": <número entero>,\n'
+        # '      "deuda_total_soles": <número decimal>,\n'
+        # '      "ranking": <posición en ranking ordenado por deuda_total_soles descendente>\n'
+        # '    }\n'
+        # '  ],\n'
+        # '  "deudas_por_vencer": [\n'
+        # '    {\n'
+        # '      "numero_documento": "<número de documento de infracción>",\n'
+        # '      "dni": "<documento de identidad del conductor>",\n'
+        # '      "fecha_infraccion": "<YYYY-MM-DD>",\n'
+        # '      "codigo_infraccion": "<código>",\n'
+        # '      "deuda_actual_soles": <número decimal con descuento aplicado si corresponde>\n'
+        # '    }\n'
+        # '  ]\n'
+        # "}\n\n"
+        # "Reglas:\n"
+        # "- Para cada deuda calcula la fecha límite de descuento (5 días hábiles desde la fecha de notificación).\n"
+        # "- Incluye en 'deudas_por_vencer' SOLO las deudas cuya fecha límite de descuento aún no ha vencido.\n"
+        # "- Ordena 'ranking_infracciones' por deuda_total_soles de mayor a menor y asigna 'ranking' comenzando en 1.\n"
+        # "- No incluyas ninguna clave adicional fuera de las dos indicadas.\n"
+        # "- Aplica además las siguientes instrucciones específicas:\n\n"
         "INSTRUCCIONES:\n" + instrucciones
     )
 
